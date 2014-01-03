@@ -32,9 +32,25 @@ import socket
 import titlecase
 import sys
 from pybtex.core import Entry, Person
+import argparse
+
 
 _doiurl='http://dx.doi.org/'
 _journal_field = "journaltitle"
+
+# Could make this an option
+_unwanted_fields= [
+    'mendeley-tags',
+    'keywords',
+    'abstract',
+    'file', 
+    'annote',
+    'doi',
+    'month',
+    'citation-verif',
+    'annotation'
+    
+]
 
 def doi2bibtex(doi):
     """Returns a bib file from a doi"""
@@ -89,7 +105,32 @@ def doi2Entry(doi):
     else:
         return None
     
+def remfieldsBib(bibfile, cleanfile=""):
+    """Grooms a bib file according to the present doi or to a doi found in internet. Returns a filename.verified.bib and  filename.unverified.bib"""
+    if cleanfile == "":
+        cleanfile = bibfile + ".clean.bib"
 
+
+    with open(bibfile,"r") as f:
+        bstr = f.read()
+    # Assume the input is utf8 encoded
+    bstr = bstr.decode('utf8')
+    
+    # Parse the bibtex file
+    bib_parser = Parser()
+    bib_data = bib_parser.parse_stream(StringIO(bstr))
+    for (key,entry) in bib_data.entries.items():
+        for field_name in _unwanted_fields:
+            if field_name in entry.fields:
+                del entry.fields[field_name]
+
+    
+    savebib(bib_data, cleanfile)
+    return "Done"
+    
+    
+    
+    
 def groomBib(bibfile, groomedfile=""):
     """Grooms a bib file according to the present doi or to a doi found in internet. Returns a filename.verified.bib and  filename.unverified.bib"""
     if groomedfile == "":
@@ -110,6 +151,13 @@ def groomBib(bibfile, groomedfile=""):
     listofpersons =[]
     if bib_cleandata  != None:
         for (key,entry) in bib_cleandata.entries.items():
+            if _journal_field in entry.fields:
+                journal = entry.fields[_journal_field]
+                journaltitlecase = titlecase.titlecase(journal)
+                if journal != journaltitlecase:
+                    entry.fields[_journal_field] = changeThisforThat(journal,journaltitlecase ,"Change for %s." % _journal_field)
+
+            #check inconsistencies in names
             for persontype in entry.persons:  #authors for example
                 for ip in range(0,len( entry.persons[persontype])):
                     lastname = entry.persons[persontype][ip].get_part_as_text("last")
@@ -126,8 +174,9 @@ def groomBib(bibfile, groomedfile=""):
                             otherversion = Person(last =possibleresults[0],first=possibleresults[1] , middle=possibleresults[2],prelast=possibleresults[3],lineage=possibleresults[4])
                             warnings.warn("Possible problem with authors: %s vs. %s" % (oneversion,otherversion ))
                     listofpersons = listofpersons + [[lastname, firstname, middle,prelast,lineage]]     
-    
+            
     savebib(bib_cleandata, groomedfile)
+    return "Done"
 
     
     
@@ -425,13 +474,37 @@ def savebib(bib_parser,filename):
 
 
 if __name__ == '__main__':
-    if  len(sys.argv) > 1:
-        bib = sys.argv[1]
-    else:
-        bib = raw_input('bibfile:')
-    if bib =="":
-        bib = "test.bib"
+    parser = argparse.ArgumentParser(description='Fix your bib file')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-v','--verification', help='Verifies the bib file comparing with info in internet: produces two files file.bib.verified.bib and file.bib.unverified',
+                    action="store_true")
+    group.add_argument('-g','--groom', help='Grooms the bib file. It produces file.bib.groom.bib',
+                    action="store_true")
+    group.add_argument('-c','--clean', help='Removes unnecesary fields from the bib file (so that it can be safely submitted). It produces file.bib.clean.bib',
+                    action="store_true")                    
+    parser.add_argument('file.bib',  help='File to process',type=str)
+    args = parser.parse_args()
+    if args.verification:
+        bib = getattr(args, 'file.bib')
+        bib = "%s/%s" % ( os.getcwd(),bib) if not os.path.isfile(bib) else bib
+        print verifyBib(bib)
+    
+    if args.groom:
+        bib = getattr(args, 'file.bib')
+        bib = "%s/%s" % ( os.getcwd(),bib) if not os.path.isfile(bib) else bib
+        print groomBib(bib)
+    if args.clean:
+        bib = getattr(args, 'file.bib')
+        bib = "%s/%s" % ( os.getcwd(),bib) if not os.path.isfile(bib) else bib
+        print remfieldsBib(bib)
+        
+#    if  len(sys.argv) > 1:
+#        bib = sys.argv[1]
+#    else:
+#        bib = raw_input('bibfile:')
+#    if bib =="":
+#        bib = "test.bib"
     #add current path 
-    bib = "%s/%s" % ( os.getcwd(),bib) if not os.path.isfile(bib) else bib   
-    print verifyBib(bib)
+#    bib = "%s/%s" % ( os.getcwd(),bib) if not os.path.isfile(bib) else bib   
+#    print verifyBib(bib)
     
