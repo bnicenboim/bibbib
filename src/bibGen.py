@@ -55,21 +55,22 @@ def doi2bibtex(doi):
     tryagain =True
     while tryagain==True:
         try:
+            print "(Requesting from internet...)"
             res = urllib2.urlopen(req)
         except socket.timeout as e:
             warnings.warn( "Timeout: %s" % (e) )
-            ta=  raw_input("try again? Y/n")
+            ta=  raw_input("try again? [Y]/n:")
             tryagain =True if (ta=="" or ta[0].capitalize()=="Y") else False
         except socket.error as e:
             warnings.warn( "Some socket error: %s" % (e) )
-            ta=  raw_input("try again? Y/n")
+            ta=  raw_input("try again? [Y]/n:")
             tryagain =True if (ta=="" or ta[0].capitalize()=="Y") else False
         except urllib2.URLError as e:
             if hasattr(e, 'reason'):
                 warnings.warn( "We failed to reach a server. Reason:' %s" % (e.reason) )
             elif hasattr(e, 'code'):
                 warnings.warn( "The server couldn\'t fulfill the request. Error code:' %s" % (e.code) )
-            ta=  raw_input("try again? Y/n")    
+            ta=  raw_input("try again? [Y]/n:")
             tryagain =True if (ta=="" or ta[0].capitalize()=="Y") else False
 
         else: 
@@ -89,6 +90,47 @@ def doi2Entry(doi):
         return None
     
 
+def groomBib(bibfile, groomedfile=""):
+    """Grooms a bib file according to the present doi or to a doi found in internet. Returns a filename.verified.bib and  filename.unverified.bib"""
+    if groomedfile == "":
+        groomedfile = bibfile + ".groomed.bib"
+
+
+    with open(bibfile,"r") as f:
+        bstr = f.read()
+    # Assume the input is utf8 encoded
+    bstr = bstr.decode('utf8')
+    
+    # Parse the bibtex file
+    bib_parser = Parser()
+    bib_data = bib_parser.parse_stream(StringIO(bstr))
+
+    #first I groom the original bib file:
+    bib_cleandata=cleanBibliographyData(bib_data)
+    listofpersons =[]
+    if bib_cleandata  != None:
+        for (key,entry) in bib_cleandata.entries.items():
+            for persontype in entry.persons:  #authors for example
+                for ip in range(0,len( entry.persons[persontype])):
+                    lastname = entry.persons[persontype][ip].get_part_as_text("last")
+                    firstname = entry.persons[persontype][ip].get_part_as_text("first")
+                    middle=entry.persons[persontype][ip].get_part_as_text("middle")
+                    prelast=entry.persons[persontype][ip].get_part_as_text("prelast")
+                    lineage= entry.persons[persontype][ip].get_part_as_text("lineage")
+                    result = [element for element in listofpersons   #if they have the same lastname and different names tell
+                             if element[0] == lastname and (firstname !=element[1] or middle !=element[2] or prelast != element[3] or lineage != element[4] )] 
+
+                    if len(result) >0:  #warns regarding conflict with names
+                        for possibleresults in result:
+                            oneversion = Person(last =lastname,first=firstname , middle=middle,prelast=prelast,lineage=lineage)
+                            otherversion = Person(last =possibleresults[0],first=possibleresults[1] , middle=possibleresults[2],prelast=possibleresults[3],lineage=possibleresults[4])
+                            warnings.warn("Possible problem with authors: %s vs. %s" % (oneversion,otherversion ))
+                    listofpersons = listofpersons + [[lastname, firstname, middle,prelast,lineage]]     
+    
+    savebib(bib_cleandata, groomedfile)
+
+    
+    
 
     
 def cleanBibliographyData(BibliographyData):
@@ -247,6 +289,7 @@ def verifyBib(bibfile, verifiedfile="", unverifiedfile=""):
             print "Looking for doi in crossref..."
             doi = doi_finder.crossref_auth_title_to_doi(doi_finder.detex(author), doi_finder.detex(title))
             verificationmode="from searched doi in crossref"
+            
             if  doi != None:
                 print "doi found in crossref"
             else:
@@ -259,6 +302,23 @@ def verifyBib(bibfile, verifiedfile="", unverifiedfile=""):
         if  doi != None:
             print "Retrieving fields from internet..."
             entriesfrominternet = doi2biblatex(doi)
+            ##check if it's the right entry:
+            if entriesfrominternet != None and entriesfrominternet.entries[entriesfrominternet.entries.keys()[0]].fields.has_key("title"):
+                titlefrominternet= entriesfrominternet.entries[entriesfrominternet.entries.keys()[0]].fields["title"]  
+                if doi_finder.fuzzy_match(title.lower(), titlefrominternet.lower()) < .9:
+                    usedoi = raw_input("maybe wrong entry... Title from internet is %s. Is it right? y/[N]:" % titlefrominternet)
+                    if usedoi=="" or usedoi[0].capitalize()=="N":
+                        print "Avoiding entry..."     
+                        entriesfrominternet = None 
+                    else:
+                        print "Using entry from internet..."     
+                    
+            else:
+                print "incomplete data from internet, avoiding entry..."     
+                entriesfrominternet = None 
+                          
+
+            
         else:
             print "doi not found, avoiding entry..."
             entriesfrominternet = None
@@ -284,14 +344,24 @@ def verifyBib(bibfile, verifiedfile="", unverifiedfile=""):
                    # unicode(entry.persons[persons][0]) == "apellido, nombre"
                     if entry.persons[persons] != personsfrominternet[persons]: #then compare with the old one and ask
                         #First checks for badly bwritten entries:
-                        print"e:", unicode(entry.persons[persons])
-                        print "i:",unicode(personsfrominternet[persons])
                         for i in range(0,min(len(entry.persons[persons]),len(personsfrominternet[persons]))): #checks the common persons
                             lastbib = entry.persons[persons][i].get_part_as_text("last")
                             lastinet = personsfrominternet[persons][i].get_part_as_text("last")
+                            firstbib = entry.persons[persons][i].get_part_as_text("first")
+                            firstinet = personsfrominternet[persons][i].get_part_as_text("first")
+                            middlebib = entry.persons[persons][i].get_part_as_text("middle")
+                            middleinet = personsfrominternet[persons][i].get_part_as_text("middle")                       
+                            lineagebib =  entry.persons[persons][i].get_part_as_text("lineage")
+                            lineageinet = personsfrominternet[persons][i].get_part_as_text("lineage")                       
+                            prelastbib =  entry.persons[persons][i].get_part_as_text("prelast")
+                            prelastinet = personsfrominternet[persons][i].get_part_as_text("prelast")                       
                             
-                            if unicode(entry.persons[persons][i]).strip() != unicode(personsfrominternet[persons][i]).strip():
-                                entry.persons[persons][i] = changeThisforThat(entry.persons[persons][i],personsfrominternet[persons][i],"Change for %s." % persons).strip()
+                            #check if the name in internet has less info that the one stored
+                            if lastbib==lastinet and (firstbib == firstinet[0] or firstbib == firstinet[0]+"." ):
+                                print "incomplete last name in internet for %s - Skipping name %s ..." % (unicode(entry.persons[persons][i]),unicode(personsfrominternet[persons][i]))
+                            else: #if there's the same amount of info then check the names
+                                if unicode(entry.persons[persons][i]).strip() != unicode(personsfrominternet[persons][i]).strip():
+                                    entry.persons[persons][i] = changeThisforThat(entry.persons[persons][i],personsfrominternet[persons][i],"Change for %s." % persons)
                         #check for missing or extra authors        
                         if len(entry.persons[persons]) < len(personsfrominternet[persons]): # missing authors in bib file
                             for j in range(i+1,len(personsfrominternet[persons]) ):
