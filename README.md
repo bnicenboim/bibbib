@@ -5,7 +5,7 @@ Some python utilities to manage bib files.
 
 ___*Syntax:*___
 
-_usage_: bibGen.py [-h] (-v | -g | -c) file.bib
+_usage_: bibGen.py \[\-h\] \(\-v \| \-g \| \-c\) file.bib
 
 Fix your bib file
 
