@@ -34,3 +34,11 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+#others
+*~
+*.pyc
+
+# Test files:
+*.bib
+test*

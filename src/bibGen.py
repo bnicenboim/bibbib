@@ -31,6 +31,7 @@ import os
 import socket
 import titlecase
 import sys
+from pybtex.core import Entry, Person
 
 _doiurl='http://dx.doi.org/'
 _journal_field = "journaltitle"
@@ -87,13 +88,15 @@ def doi2Entry(doi):
     else:
         return None
     
+
+
     
 def cleanBibliographyData(BibliographyData):
     """clean a pybtex  BibliographyData and transforms it to biblatex """
     bib_data=None
     if BibliographyData  != None:
         for (key,entry) in BibliographyData.entries.items():
-            for persontype in entry.persons:  #authors for example
+            for persontype in entry.persons:  #authors, editos
                 for ip in range(0,len( entry.persons[persontype])):
                     eachperson = entry.persons[persontype][ip]
                      
@@ -112,11 +115,17 @@ def cleanBibliographyData(BibliographyData):
                 title = entry.fields['title']
                 if title.startswith("{") and title.endswith("}")  and  re.search( r'..[A-Z]|"',title)==None  :
                     title = title[1:-1]
-                    if title.endswith("."):
-                        title=title[:-1]
-                    entry.fields['title'] = title
+                
+                #remove the final dot
+                if title.endswith("."):
+                    title=title[:-1]
+                if title.endswith(".}"):
+                    title=title[:-2] + "}"    
+                #add bracketing if there's something capitalized in the middle                    
                 if not (title.startswith("{") and title.endswith("}")) and not    re.search( r'..[A-Z]|"',title)==None:   #in this case add more bracketing
-                    entry.fields['title'] = "{" + entry.fields['title']+"}"
+                    title = "{" + title +"}"
+                    
+                entry.fields['title']=title
                 
                 
             #check if the format of the pages
@@ -275,9 +284,14 @@ def verifyBib(bibfile, verifiedfile="", unverifiedfile=""):
                    # unicode(entry.persons[persons][0]) == "apellido, nombre"
                     if entry.persons[persons] != personsfrominternet[persons]: #then compare with the old one and ask
                         #First checks for badly bwritten entries:
+                        print"e:", unicode(entry.persons[persons])
+                        print "i:",unicode(personsfrominternet[persons])
                         for i in range(0,min(len(entry.persons[persons]),len(personsfrominternet[persons]))): #checks the common persons
-                            if unicode(entry.persons[persons][i]) != unicode(personsfrominternet[persons][i]):
-                                entry.persons[persons][i] = changeThisforThat(entry.persons[persons][i],personsfrominternet[persons][i],"Change for %s." % persons)
+                            lastbib = entry.persons[persons][i].get_part_as_text("last")
+                            lastinet = personsfrominternet[persons][i].get_part_as_text("last")
+                            
+                            if unicode(entry.persons[persons][i]).strip() != unicode(personsfrominternet[persons][i]).strip():
+                                entry.persons[persons][i] = changeThisforThat(entry.persons[persons][i],personsfrominternet[persons][i],"Change for %s." % persons).strip()
                         #check for missing or extra authors        
                         if len(entry.persons[persons]) < len(personsfrominternet[persons]): # missing authors in bib file
                             for j in range(i+1,len(personsfrominternet[persons]) ):
@@ -291,8 +305,8 @@ def verifyBib(bibfile, verifiedfile="", unverifiedfile=""):
                                     entry.persons[persons].remove(entry.persons[persons][j])
                             
                         
-                    else: #if there's  new field online, the field has to be added
-                        entry.fields[persons] = fieldsfrominternet[persons]                
+                else: #if there's  new field online, the field has to be added
+                    entry.fields[persons] = fieldsfrominternet[persons]                
                     
                 
             for fieldname in fieldsfrominternet:

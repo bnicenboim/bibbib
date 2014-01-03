@@ -1,0 +1,6 @@
+* It shouldn't ask for a "worst" name than the already found
+* It should escape &
+* If the doi comes from google, it should check if the title is more or less similar to the present title
+* Use isbn for books
+* remove the last period from titles
+
