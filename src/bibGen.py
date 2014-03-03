@@ -63,7 +63,8 @@ def doi2bibtex(doi):
         
     # create the request object and set some headers
     req = urllib2.Request(completedoiurl)
-    req.add_header('Accept', 'text/bibliography')
+    #req.add_header('Accept', 'text/bibliography')
+    req.add_header("accept", "application/x-bibtex")
     req.add_header("style", "bibtex")
     
 
@@ -222,7 +223,7 @@ def cleanBibliographyData(BibliographyData):
             #check if the format of the pages
             if 'pages' in entry.fields:
                 pages = entry.fields['pages']
-                pageparts = re.findall( r'(\d+)(-+)(\d+)',pages)
+                pageparts = re.findall( ur'(\d+)(-+|\u2013)(\d+)',pages)
                 if len(pages) >0 and  len(pageparts) ==0:
                     warnings.warn( "only one page found  in %s" % key)
                 elif len(pageparts) ==0:
@@ -352,7 +353,8 @@ def verifyBib(bibfile, verifiedfile="", unverifiedfile=""):
             print "Retrieving fields from internet..."
             entriesfrominternet = doi2biblatex(doi)
             ##check if it's the right entry:
-            if entriesfrominternet != None and entriesfrominternet.entries[entriesfrominternet.entries.keys()[0]].fields.has_key("title"):
+            
+            if entriesfrominternet != None and len(entriesfrominternet.entries.keys())>0  and entriesfrominternet.entries[entriesfrominternet.entries.keys()[0]].fields.has_key("title"):
                 titlefrominternet= entriesfrominternet.entries[entriesfrominternet.entries.keys()[0]].fields["title"]  
                 if doi_finder.fuzzy_match(title.lower(), titlefrominternet.lower()) < .9:
                     usedoi = raw_input("maybe wrong entry... Title from internet is %s. Is it right? y/[N]:" % titlefrominternet)
